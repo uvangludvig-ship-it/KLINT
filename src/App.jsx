@@ -97,15 +97,17 @@ async function fetchNews(newsApiKey, extraQueries = []) {
 }
 
 // ═══ API ═══
-async function askClaude(apiKey, prompt, sys) {
+async function askClaude(apiKey, prompt, sys, tools) {
+  const body = {
+    apiKey, model: "claude-sonnet-4-20250514", max_tokens: 4096,
+    system: sys || BRAND,
+    messages: [{ role: "user", content: prompt }],
+  };
+  if (tools) body.tools = tools;
   const res = await fetch("/.netlify/functions/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      apiKey, model: "claude-sonnet-4-20250514", max_tokens: 2048,
-      system: sys || BRAND,
-      messages: [{ role: "user", content: prompt }],
-    }),
+    body: JSON.stringify(body),
   });
   const d = await res.json();
   if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
@@ -288,28 +290,20 @@ Ge exakt 10 nummer (eller färre om det inte finns 10 relevanta). BARA JSON-arra
   }
 
   // ─── TOPLIST: Load suggestions from Claude ───
+  const WEB_SEARCH = [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }];
+
   async function loadToplistSuggestions() {
     setBusySuggestions(true);
     try {
       const r = await askClaude(keys.claude,
-        `Ge mig exakt 5 aktuella och intressanta toppliste-idéer för LinkedIn-innehåll riktat mot nordiska AI/VC-investerare.
+        `Gör EN snabb sökning på "AI startups Nordic 2026" eller liknande för att få koll på läget just nu.
 
-Förslagen ska vara:
-- Specifika och tidsaktuella (referera till verkliga trender, bolag, händelser)
-- Varierande (mix av bolag, trender, investeringar, teknologi, geografier)
-- Engagerande som LinkedIn-innehåll
-- Fokuserade på Norden/Europa men kan inkludera globala trender som påverkar regionen
+Baserat på sökresultaten, ge mig 5 toppliste-idéer för LinkedIn. Kort och koncist.
 
-Svara BARA med en JSON-array:
-[
-  {
-    "label": "Kort rubrik med emoji i början (max 8 ord)",
-    "prompt": "Fullständig, detaljerad prompt som beskriver exakt vad topplistan ska innehålla (2-3 meningar)"
-  }
-]
-
-BARA JSON, ingen annan text.`,
-        "Du är en redaktör och strateg för ett nordiskt AI-fokuserat VC-bolag. Du följer AI-marknaden, VC-deals och tech-trender i Norden och Europa noga. Svara ENBART med JSON."
+JSON-array, inget annat:
+[{"label":"Emoji + rubrik max 8 ord","prompt":"Vad topplistan ska innehålla (1-2 meningar)"}]`,
+        "Nordisk AI/VC-redaktör. Gör MAX 1 sökning. Svara ENBART med JSON — ingen text före eller efter.",
+        WEB_SEARCH
       );
       const parsed = parseJSON(r);
       if (parsed && parsed.length > 0) {
@@ -323,28 +317,21 @@ BARA JSON, ingen annan text.`,
   // ─── TOPLIST: Generate ───
   async function generateToplist() {
     if (!toplistPrompt.trim()) return;
-    setBusy4(true); setErr(""); setStatus("Genererar topplista...");
+    setBusy4(true); setErr(""); setStatus("Söker och genererar topplista...");
     try {
       const r = await askClaude(keys.claude,
-        `${toplistPrompt}
+        `Gör max 2 snabba sökningar för att hitta aktuell info, sedan svara:
 
-Svara BARA med en JSON-array med exakt detta format:
-[
-  {
-    "rank": 1,
-    "name": "Bolagsnamn",
-    "oneliner": "Kort beskrivning av vad bolaget gör (max 15 ord)",
-    "reasoning": "Varför bolaget är med på listan — konkret motivering med data/exempel (2-3 meningar)"
-  }
-]
+${toplistPrompt}
 
-Regler:
-- Ge exakt 5 bolag/poster om inget annat anges
-- Basera på aktuell kunskap — senaste finansieringsrundor, produktlanseringar, nyheter
-- Var specifik: nämn belopp, investerare, produkter, kunder där det är relevant
-- Nordiskt fokus om inget annat specificeras
-- BARA JSON, ingen annan text`,
-        "Du är en expert på nordisk tech, AI och venture capital. Du har djup kunskap om AI-ekosystemet i Norden och Europa. Svara ENBART med JSON."
+TIDSPRESS — var effektiv. Sök smart, svara snabbt.
+
+JSON-array, inget annat:
+[{"rank":1,"name":"Namn","oneliner":"Vad de gör (max 15 ord)","reasoning":"Konkret motivering med data (2-3 meningar)"}]
+
+Regler: 5 poster, aktuell data, nordiskt fokus om ej annat anges. BARA JSON.`,
+        "Nordisk AI/VC-expert. Gör MAX 2 sökningar — var snabb och effektiv. Svara ENBART med JSON.",
+        WEB_SEARCH
       );
       setStatus("");
       const parsed = parseJSON(r);
