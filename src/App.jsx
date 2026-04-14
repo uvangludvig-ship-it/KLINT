@@ -161,6 +161,13 @@ export default function App() {
     setKeys({ claude: claudeKey.trim(), news: newsKey.trim() });
   }
 
+  // Auto-load suggestions when switching to toplist tab
+  useEffect(() => {
+    if (tab === "toplist" && !suggestionsLoaded && keys && !busySuggestions) {
+      loadToplistSuggestions();
+    }
+  }, [tab, suggestionsLoaded, keys]);
+
   // ─── LOGIN ───
   if (!keys) {
     const pName = PROVIDER === "newsdata" ? "NewsData.io" : PROVIDER === "gnews" ? "GNews" : "NewsAPI.org";
@@ -363,13 +370,6 @@ Regler:
     setPostInput(`Skriv ett LinkedIn-inlägg baserat på denna topplista. Gör det engagerande med en stark hook, personlig vinkel och avsluta med en fråga.\n\nTOPPLISTA:\n${text}`);
     setTab("create");
   }
-
-  // Auto-load suggestions when switching to toplist tab
-  useEffect(() => {
-    if (tab === "toplist" && !suggestionsLoaded && keys && !busySuggestions) {
-      loadToplistSuggestions();
-    }
-  }, [tab, suggestionsLoaded, keys]);
 
   const tabStyle = (active) => ({
     background: active ? T.as : "transparent", color: active ? T.ac : T.tm,
