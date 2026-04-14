@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 const BRAND = `Du är en AI-assistent som hjälper med innehållsproduktion för ett nordiskt VC-bolag fokuserat på AI-infrastruktur.
 
@@ -39,6 +39,7 @@ const Spin = ({ s = 18 }) => (
 );
 
 // NEWS konfiguration
+// Stöder: "newsdata", "gnews", "newsapi"
 const PROVIDER = "newsdata";
 
 const SEARCH_QUERIES = [
@@ -128,6 +129,63 @@ function CopyBtn({ text }) {
   );
 }
 
+// ═══ SCHEDULER ═══
+function Scheduler({ drafts }) {
+  const days = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"];
+  const [schedule, setSchedule] = useState(() => days.map(d => ({ day: d, post: "", time: "08:00", platform: "LinkedIn" })));
+  const [copied, setCopied] = useState(false);
+  function assignDraft(di, dri) { setSchedule(prev => prev.map((s, i) => i === di ? { ...s, post: drafts[dri]?.body || "" } : s)); }
+  function clearDay(di) { setSchedule(prev => prev.map((s, i) => i === di ? { ...s, post: "" } : s)); }
+  function exportSchedule() {
+    const text = schedule.filter(s => s.post).map(s => `--- ${s.day} kl ${s.time} - ${s.platform} ---\n\n${s.post}\n`).join("\n\n");
+    navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Veckoschema</h2>
+          <p style={{ fontSize: 13, color: T.tm, margin: 0 }}>Tilldela utkast till rätt dag, exportera sedan</p>
+        </div>
+        {schedule.some(s => s.post) && (
+          <button onClick={exportSchedule} style={{ background: copied ? T.os : `linear-gradient(135deg, ${T.ac}, #2563eb)`, color: copied ? T.ok : "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer", fontFamily: F }}>
+            {copied ? "Kopierat" : "Exportera veckan"}
+          </button>
+        )}
+      </div>
+      {drafts.length === 0 && <div style={{ background: T.as, borderRadius: 8, padding: "12px 16px", fontSize: 13, color: T.ac, marginBottom: 16 }}>Skapa inlägg först — de dyker upp här.</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {schedule.map((s, di) => (
+          <div key={di} style={{ background: T.sf, border: `1px solid ${T.bd}`, borderRadius: 10, padding: 14, display: "flex", gap: 14, alignItems: "flex-start" }}>
+            <div style={{ minWidth: 80 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{s.day}</div>
+              <input type="time" value={s.time} onChange={e => setSchedule(prev => prev.map((x, i) => i === di ? { ...x, time: e.target.value } : x))}
+                style={{ background: T.bg, color: T.tx, border: `1px solid ${T.bd}`, borderRadius: 4, padding: "3px 6px", fontSize: 12, fontFamily: F, outline: "none", width: 80 }} />
+              <select value={s.platform} onChange={e => setSchedule(prev => prev.map((x, i) => i === di ? { ...x, platform: e.target.value } : x))}
+                style={{ display: "block", marginTop: 4, background: T.bg, color: T.tx, border: `1px solid ${T.bd}`, borderRadius: 4, padding: "3px 6px", fontSize: 11, fontFamily: F, outline: "none", width: 80 }}>
+                <option>LinkedIn</option><option>Twitter/X</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              {s.post ? (
+                <div>
+                  <pre style={{ fontFamily: F, fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word", color: T.tx, margin: 0, maxHeight: 120, overflow: "auto" }}>{s.post.substring(0, 200)}{s.post.length > 200 ? "..." : ""}</pre>
+                  <button onClick={() => clearDay(di)} style={{ marginTop: 6, background: "none", border: "none", color: T.dn, fontSize: 11, cursor: "pointer", fontFamily: F }}>Ta bort</button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {drafts.map((d, dri) => <button key={dri} onClick={() => assignDraft(di, dri)} style={{ background: T.bg, color: T.tm, border: `1px solid ${T.bd}`, borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer", fontFamily: F }}>Utkast {dri + 1}</button>)}
+                  {drafts.length === 0 && <span style={{ fontSize: 12, color: T.td }}>Inga utkast</span>}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ═══ MAIN APP ═══
 export default function App() {
   const [keys, setKeys] = useState(null);
@@ -147,14 +205,6 @@ export default function App() {
   const [extraQuery, setExtraQuery] = useState("");
   const [selectedNews, setSelectedNews] = useState([]);
   const [rankFocus, setRankFocus] = useState("");
-
-  // ─── TOPLIST STATE ───
-  const [toplistPrompt, setToplistPrompt] = useState("");
-  const [toplistResults, setToplistResults] = useState([]);
-  const [busy4, setBusy4] = useState(false);
-  const [toplistSuggestions, setToplistSuggestions] = useState([]);
-  const [busySuggestions, setBusySuggestions] = useState(false);
-  const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
 
   function doLogin() {
     if (!claudeKey.trim() || !newsKey.trim()) return;
@@ -280,97 +330,6 @@ Ge exakt 10 nummer (eller färre om det inte finns 10 relevanta). BARA JSON-arra
     setBusy3(false);
   }
 
-  // ─── TOPLIST: Load suggestions from Claude ───
-  async function loadToplistSuggestions() {
-    setBusySuggestions(true);
-    try {
-      const r = await askClaude(keys.claude,
-        `Ge mig exakt 5 aktuella och intressanta toppliste-idéer för LinkedIn-innehåll riktat mot nordiska AI/VC-investerare.
-
-Förslagen ska vara:
-- Specifika och tidsaktuella (referera till verkliga trender, bolag, händelser)
-- Varierande (mix av bolag, trender, investeringar, teknologi, geografier)
-- Engagerande som LinkedIn-innehåll
-- Fokuserade på Norden/Europa men kan inkludera globala trender som påverkar regionen
-
-Svara BARA med en JSON-array:
-[
-  {
-    "label": "Kort rubrik med emoji i början (max 8 ord)",
-    "prompt": "Fullständig, detaljerad prompt som beskriver exakt vad topplistan ska innehålla (2-3 meningar)"
-  }
-]
-
-BARA JSON, ingen annan text.`,
-        "Du är en redaktör och strateg för ett nordiskt AI-fokuserat VC-bolag. Du följer AI-marknaden, VC-deals och tech-trender i Norden och Europa noga. Svara ENBART med JSON."
-      );
-      const parsed = parseJSON(r);
-      if (parsed && parsed.length > 0) {
-        setToplistSuggestions(parsed);
-      }
-      setSuggestionsLoaded(true);
-    } catch (e) { setErr(e.message); }
-    setBusySuggestions(false);
-  }
-
-  // ─── TOPLIST: Generate ───
-  async function generateToplist() {
-    if (!toplistPrompt.trim()) return;
-    setBusy4(true); setErr(""); setStatus("Genererar topplista...");
-    try {
-      const r = await askClaude(keys.claude,
-        `${toplistPrompt}
-
-Svara BARA med en JSON-array med exakt detta format:
-[
-  {
-    "rank": 1,
-    "name": "Bolagsnamn",
-    "oneliner": "Kort beskrivning av vad bolaget gör (max 15 ord)",
-    "reasoning": "Varför bolaget är med på listan — konkret motivering med data/exempel (2-3 meningar)"
-  }
-]
-
-Regler:
-- Ge exakt 5 bolag/poster om inget annat anges
-- Basera på aktuell kunskap — senaste finansieringsrundor, produktlanseringar, nyheter
-- Var specifik: nämn belopp, investerare, produkter, kunder där det är relevant
-- Nordiskt fokus om inget annat specificeras
-- BARA JSON, ingen annan text`,
-        "Du är en expert på nordisk tech, AI och venture capital. Du har djup kunskap om AI-ekosystemet i Norden och Europa. Svara ENBART med JSON."
-      );
-      setStatus("");
-      const parsed = parseJSON(r);
-      if (parsed && parsed.length > 0) {
-        setToplistResults(parsed);
-      } else {
-        setToplistResults([{ rank: 1, name: "Fel", oneliner: "Kunde inte tolka svaret", reasoning: r }]);
-      }
-    } catch (e) { setErr(e.message); setStatus(""); }
-    setBusy4(false);
-  }
-
-  function toplistToText() {
-    return toplistResults.map(item =>
-      `${item.rank}. ${item.name}\n${item.oneliner}\n${item.reasoning}`
-    ).join("\n\n");
-  }
-
-  function toplistToLinkedIn() {
-    const text = toplistResults.map(item =>
-      `${item.rank}. ${item.name} — ${item.oneliner}\n${item.reasoning}`
-    ).join("\n\n");
-    setPostInput(`Skriv ett LinkedIn-inlägg baserat på denna topplista. Gör det engagerande med en stark hook, personlig vinkel och avsluta med en fråga.\n\nTOPPLISTA:\n${text}`);
-    setTab("create");
-  }
-
-  // Auto-load suggestions when switching to toplist tab
-  useEffect(() => {
-    if (tab === "toplist" && !suggestionsLoaded && keys && !busySuggestions) {
-      loadToplistSuggestions();
-    }
-  }, [tab, suggestionsLoaded, keys]);
-
   const tabStyle = (active) => ({
     background: active ? T.as : "transparent", color: active ? T.ac : T.tm,
     border: `1px solid ${active ? T.ac : "transparent"}`, borderRadius: 8,
@@ -392,7 +351,7 @@ Regler:
         <div style={{ display: "flex", gap: 2, background: T.bg, borderRadius: 10, padding: 3 }}>
           <button onClick={() => setTab("scan")} style={tabStyle(tab === "scan")}>Nyhetsscan</button>
           <button onClick={() => setTab("create")} style={tabStyle(tab === "create")}>Skapa inlägg</button>
-          <button onClick={() => setTab("toplist")} style={tabStyle(tab === "toplist")}>Topplistor</button>
+          <button onClick={() => setTab("schedule")} style={tabStyle(tab === "schedule")}>Schema</button>
         </div>
       </div>
 
@@ -531,101 +490,7 @@ Regler:
           </div>
         )}
 
-        {/* TOPLIST */}
-        {tab === "toplist" && (
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Topplistor</h2>
-            <p style={{ fontSize: 13, color: T.tm, margin: "0 0 16px" }}>Generera topplistor för LinkedIn — bolag, trender, investeringar</p>
-
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <label style={{ fontSize: 12, color: T.td, fontWeight: 500 }}>AI-förslag — klicka för att använda, eller skriv eget nedan</label>
-                <button onClick={() => { setSuggestionsLoaded(false); setToplistSuggestions([]); loadToplistSuggestions(); }} disabled={busySuggestions}
-                  style={{ background: "none", border: `1px solid ${T.bd}`, borderRadius: 6, padding: "4px 10px", fontSize: 11, color: T.tm, cursor: busySuggestions ? "wait" : "pointer", fontFamily: F, display: "flex", alignItems: "center", gap: 4 }}>
-                  {busySuggestions ? <Spin s={12} /> : null} {busySuggestions ? "Laddar..." : "Nya förslag"}
-                </button>
-              </div>
-
-              {busySuggestions && toplistSuggestions.length === 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: T.sf, borderRadius: 8, fontSize: 13, color: T.tm }}>
-                  <Spin s={14} /> Hämtar aktuella förslag från AI...
-                </div>
-              )}
-
-              {toplistSuggestions.length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {toplistSuggestions.map((sug, i) => (
-                    <button key={i} onClick={() => setToplistPrompt(sug.prompt)}
-                      style={{
-                        background: toplistPrompt === sug.prompt ? T.as : T.sf,
-                        color: toplistPrompt === sug.prompt ? T.ac : T.tm,
-                        border: `1px solid ${toplistPrompt === sug.prompt ? T.ac : T.bd}`,
-                        borderRadius: 8, padding: "8px 14px", fontSize: 12, cursor: "pointer", fontFamily: F,
-                        transition: "all 0.15s", textAlign: "left",
-                      }}>
-                      {sug.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 12, color: T.td, fontWeight: 500, display: "block", marginBottom: 6 }}>Toppliste-prompt</label>
-              <textarea value={toplistPrompt} onChange={e => setToplistPrompt(e.target.value)}
-                placeholder={"Skriv din egen toppliste-idé eller klicka ett förslag ovan...\n\nExempel:\n- 5 hetaste AI-bolagen i Norden just nu\n- Top 3 europeiska GPU-molntjänster\n- 5 mest intressanta AI-förvärv senaste kvartalet"}
-                rows={4} style={{ width: "100%", boxSizing: "border-box", background: T.sf, color: T.tx, border: `1px solid ${T.bd}`, borderRadius: 8, padding: "12px 14px", fontSize: 13, fontFamily: F, outline: "none", resize: "vertical", lineHeight: 1.5 }} />
-            </div>
-
-            <button onClick={generateToplist} disabled={busy4 || !toplistPrompt.trim()}
-              style={{ display: "inline-flex", alignItems: "center", gap: 8, background: busy4 || !toplistPrompt.trim() ? T.sf : `linear-gradient(135deg, ${T.ac}, #2563eb)`, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 500, cursor: busy4 || !toplistPrompt.trim() ? "not-allowed" : "pointer", fontFamily: F, marginBottom: 20, opacity: !toplistPrompt.trim() ? 0.5 : 1 }}>
-              {busy4 ? <Spin s={16} /> : null} {busy4 ? "Genererar..." : "Generera topplista"}
-            </button>
-
-            {toplistResults.length > 0 && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, color: T.tm }}>{toplistResults.length} poster</span>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <CopyBtn text={toplistToText()} />
-                    <button onClick={toplistToLinkedIn}
-                      style={{ background: T.as, color: T.ac, border: `1px solid ${T.ac}`, borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer", fontFamily: F }}>
-                      Skapa LinkedIn-inlägg
-                    </button>
-                    <button onClick={() => setToplistResults([])}
-                      style={{ background: T.sf, color: T.dn, border: `1px solid ${T.bd}`, borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer", fontFamily: F }}>
-                      Rensa
-                    </button>
-                  </div>
-                </div>
-
-                {toplistResults.map((item, i) => (
-                  <div key={i} style={{ background: T.sf, border: `1px solid ${T.bd}`, borderRadius: 10, padding: 16, marginBottom: 10, transition: "all 0.15s" }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                        background: i === 0 ? "linear-gradient(135deg, #f59e0b, #d97706)" : i === 1 ? "linear-gradient(135deg, #94a3b8, #64748b)" : i === 2 ? "linear-gradient(135deg, #cd7c2f, #a3621d)" : `linear-gradient(135deg, ${T.ac}, #2563eb)`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 14, fontWeight: 700, color: "#fff",
-                      }}>
-                        {item.rank || i + 1}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{item.name}</div>
-                        <div style={{ fontSize: 13, color: T.ac, marginBottom: 8 }}>{item.oneliner}</div>
-                        <div style={{ fontSize: 13, color: T.tm, lineHeight: 1.5 }}>{item.reasoning}</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                <div style={{ textAlign: "center", padding: 14, background: T.as, borderRadius: 10, marginTop: 4 }}>
-                  <span style={{ color: T.ac, fontSize: 13 }}>Klicka "Skapa LinkedIn-inlägg" för att göra ett inlägg av topplistan</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {tab === "schedule" && <Scheduler drafts={drafts} />}
       </div>
     </div>
   );
